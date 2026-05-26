@@ -2,69 +2,68 @@
 //
 // Upload via the Tailscale admin console (Access Controls -> File mode),
 // or wire up GitOps so this file syncs from main on push:
-// https://tailscale.com/kb/1207/sync-acls/
+// https://tailscale.com/docs/gitops
 //
-// HuJSON = JSON with comments and trailing commas. Don't bother
-// converting to strict JSON; the Tailscale console accepts HuJSON.
+// HuJSON = JSON with comments and trailing commas. The Tailscale console
+// accepts it directly; no conversion to strict JSON needed.
+//
+// This file uses the modern `grants` syntax (recommended for new tailnets).
+// The legacy `acls` block still works but isn't used here.
 
 {
-  // ===== Groups =====
-  // TODO: replace with your real identities
-  "groups": {
-    "group:admin": [
-      // "you@example.com",
-    ],
-    "group:family": [
-      // "spouse@example.com",
-    ],
-  },
+	// ===== Groups =====
+	// Named lists of user identities. Replace with your real users.
+	"groups": {
+		"group:admin": [
+			// "you@example.com",
+		],
+		"group:family": [
+			// People who only need Plex (which lives outside the tailnet anyway).
+			// "spouse@example.com",
+		],
+	},
 
-  // ===== Tags =====
-  // Tags let services join the tailnet without being owned by a user.
-  // tag:plex-router  -> the subnet router container
-  // tag:plex-ssh     -> the SSH sidecar container
-  "tagOwners": {
-    "tag:plex-router": ["group:admin"],
-    "tag:plex-ssh":    ["group:admin"],
-  },
+	// ===== Tags =====
+	// Identities for non-human devices. tag:plex-router is what the subnet
+	// router container claims when it joins the tailnet.
+	"tagOwners": {
+		"tag:plex-router": ["autogroup:admin"],
+	},
 
-  // ===== Auto-approve the advertised route =====
-  // Without this, every restart of the subnet router needs a manual
-  // approval click in the admin console.
-  "autoApprovers": {
-    "routes": {
-      "172.30.0.0/24": ["tag:plex-router"],
-    },
-  },
+	// ===== Auto-approvers =====
+	// Without this, every restart of the subnet router needs a manual
+	// approval click in the admin console.
+	"autoApprovers": {
+		"routes": {
+			"172.30.0.0/24": ["tag:plex-router"],
+		},
+	},
 
-  // ===== Access rules =====
-  "acls": [
-    // TODO: who can reach what.
-    //
-    // Suggested starting point:
-    //   - admin group can reach the entire 172.30.0.0/24 on any port
-    //     (full *arr access + SSH sidecar)
-    //   - family group can reach nothing on the private network
-    //     (they only need Plex, which lives outside the tailnet)
-    //   - the SSH sidecar accepts Tailscale SSH from the admin group only
-    //
-    // {
-    //   "action": "accept",
-    //   "src":    ["group:admin"],
-    //   "dst":    ["172.30.0.0/24:*"],
-    // },
-  ],
+	// ===== Grants =====
+	// Default behavior is DENY. Only explicitly-granted paths work.
+	// Each grant takes a src, dst, and ip (port spec).
+	"grants": [
+		// Admins reach the entire private Docker network on any port
+		{
+			"src": ["group:admin"],
+			"dst": ["172.30.0.0/24"],
+			"ip":  ["*"],
+		},
 
-  // ===== Tailscale SSH =====
-  // Without an explicit ssh{} block, `tailscale ssh` won't work even
-  // if the daemon has --ssh enabled.
-  "ssh": [
-    // TODO: who can SSH to what, with check mode or not
-    // {
-    //   "action": "check",   // require re-auth at the IdP every N hours
-    //   "src":    ["group:admin"],
-    //   "dst":    ["tag:plex-ssh"],
-    //   "users":  ["root", "autogroup:nonroot"],
-    // },
-  ],
+		// group:family has no grant here, so they cannot reach the
+		// private network at all. They get Plex (which is public) and
+		// that is the entire access surface they need.
+	],
+
+	// ===== Tailscale SSH =====
+	// Without an explicit ssh{} block, `tailscale ssh` won't work even
+	// if the daemon has --ssh enabled.
+	"ssh": [
+		{
+			"action": "check",                       // re-auth at the IdP every 12 hours
+			"src":    ["autogroup:member"],
+			"dst":    ["autogroup:self"],
+			"users":  ["root", "autogroup:nonroot"],
+		},
+	],
 }
