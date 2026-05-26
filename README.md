@@ -8,7 +8,7 @@
 
 The majority of deployments use Docker, a containerization application host. Each container gets its own private IP on an internal NAT range and by default accept connections from anywhere. Many users utilize a firewall, like the Linux default UFW, which requires exposing the ports those applications use by poking a hole in the firewall.
 
-Typical Server Example Setup:
+### Typical Server Example Setup:
 
 -->Docker
     -Plex Media Server: https://app.plex.tv/desktop/#!/
@@ -26,7 +26,7 @@ Typical Server Example Setup:
 
 With Tailscale, you no longer need to expose the admin application ports to the internet. Access is handled via the Tailscale infrastructure, and access is gated on Tailscale instead of locally in each application. Once this is enabled, you can disable authentication completely for the admin applciations, as they are only accessable via the Tailnet.
 
-Tailscale Based Server Example Setup:
+### Tailscale Based Server Example Setup:
 
 -->Docker
     -Plex Media Server: https://app.plex.tv/desktop/#!/
@@ -43,7 +43,7 @@ BUT....
 
 We have to use IP addresses and ports. Bleh! Thankfully, Tailscale has a great solution: Tailscale Serve can proxy internal IP requests to a DNS hostname. Additionally, while we reduced the amount of holes in our firewall from 6 --> 2, we can further decrease our attack posture by moving SSH onto the Tailnet too. 
 
-Tailscale Serve ENHANCED Server Example Setup:
+### Tailscale Serve ENHANCED Server Example Setup:
 
 -->Docker
     -Plex Media Server: https://app.plex.tv/desktop/#!/
@@ -81,6 +81,7 @@ flowchart TD
     class Fail1,Fail2 fail
     class Done ok
 ```
+[!TIP]If the user device is not on the tailnet, or they are not authorized to access the resource, they will experience a timeout. This is intentional and expected, as there is no need to let the user know the service is active if they are not authorized.
 
 ## Prerequisites
 
