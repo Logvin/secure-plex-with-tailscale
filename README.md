@@ -94,14 +94,57 @@ flowchart TD
 > [!TIP]
 > If the user device is not on the tailnet, or they are not authorized to access the resource, they will experience a timeout. This is intentional and expected, as there is no need to let the user know the service is active if they are not authorized.
 
-## Prerequisites
+## High Level Plan
 
-<!-- TODO:
-- A Tailscale account (free tier is fine)
-- A Linux host with Docker + Docker Compose
-- An auth key from the Tailscale admin console
-- Tailscale installed on at least one client device (your laptop)
--->
+This is the order of operations for getting from a typical Plex deployment to a Tailscale-secured one. Each phase builds on the previous, and you can stop at any phase if the value is already enough for your use case.
+
+### 1. Install and enable Tailscale on the host
+
+Get your host onto the tailnet and enable Tailscale SSH. Once Tailscale SSH is running in parallel with your existing SSH for a week or two and you're confident nothing depends on the public path, you can remove port 22 from your firewall entirely.
+
+- Install Tailscale via your package manager
+- Run `sudo tailscale up --ssh` to join the tailnet with SSH enabled
+- Verify with `tailscale status` and test `tailscale ssh user@hostname` from another device on your tailnet
+
+Docs:
+- [Install Tailscale](https://tailscale.com/docs/install)
+- [Tailscale SSH](https://tailscale.com/docs/features/tailscale-ssh)
+
+### 2. Deploy the subnet router container
+
+Bring up the `ts-subnet-router` container, which bridges your private Docker network to your tailnet. This is what makes Sonarr/Radarr/Prowlarr/Tautulli reachable to your tailnet without exposing them publicly.
+
+- Define a dedicated private Docker network (e.g. `172.30.0.0/24`) for the apps you want to secure
+- Run the `tailscale/tailscale` container with `TS_AUTHKEY` and `TS_ROUTES=172.30.0.0/24` set
+- Enable IP forwarding inside the container (`net.ipv4.ip_forward=1`)
+- Approve the advertised route in the Tailscale admin console (or use auto-approvers in your ACL to skip this step on future restarts)
+
+Docs:
+- [Subnet routers](https://tailscale.com/docs/features/subnet-routers)
+
+### 3. Define the ACL policy
+
+Write the policy file that decides which tailnet identities (you, family, future contractors) can reach which services on which ports. This replaces per-app basic auth with a single, version-controlled rule set.
+
+- Author `acl.hujson` with `groups`, `tagOwners`, `autoApprovers`, `acls`, and `ssh` blocks
+- Upload via the admin console, or wire up Tailscale's native GitOps sync to push from this repo on every commit
+- Verify rules with `tailscale debug acl-check` before relying on them
+
+Docs:
+- [Policy file syntax](https://tailscale.com/docs/reference/syntax/policy-file)
+- [ACL examples](https://tailscale.com/docs/reference/examples/acls)
+
+### 4. Configure Tailscale Serve
+
+Replace IP-and-port URLs (`http://172.30.0.10:8989`) with friendly HTTPS hostnames (`https://app.your-tailnet.ts.net/sonarr/`), backed by auto-provisioned Let's Encrypt certs. No reverse proxy needed.
+
+- Author a serve config JSON that maps paths (`/sonarr/`, `/radarr/`, etc.) to the *arr container IPs and ports
+- Mount the serve config into the subnet router container so it's picked up at startup
+- Set the `URL Base` config on each *arr app to match its path prefix (`/sonarr`, `/radarr`, etc.) so internal links resolve correctly
+- Verify each app loads at `https://app.your-tailnet.ts.net/<app>/` from a device on the tailnet
+
+Docs:
+- [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve)
 
 ## Quick Start
 
