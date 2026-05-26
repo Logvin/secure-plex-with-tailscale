@@ -1,0 +1,18 @@
+{
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "app.YOUR-TAILNET.ts.net:443": {
+      "Handlers": {
+        "/":          { "Text": "<!DOCTYPE html><html><head><title>Plex Stack</title><style>body{font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.6}h1{font-weight:600}a{display:block;padding:0.5rem 0;color:#0969da;text-decoration:none}a:hover{text-decoration:underline}</style></head><body><h1>Plex Stack</h1><a href='/sonarr/'>Sonarr</a><a href='/radarr/'>Radarr</a><a href='/prowlarr/'>Prowlarr</a><a href='/tautulli/'>Tautulli</a></body></html>" },
+        "/sonarr/":   { "Proxy": "http://172.30.0.10:8989" },
+        "/radarr/":   { "Proxy": "http://172.30.0.11:7878" },
+        "/prowlarr/": { "Proxy": "http://172.30.0.12:9696" },
+        "/tautulli/": { "Proxy": "http://172.30.0.13:8181" }
+      }
+    }
+  }
+}

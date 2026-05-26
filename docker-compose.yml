@@ -1,15 +1,20 @@
 # Secure your Plex Software Stack with Tailscale
 #
-# Two networks:
-#   - plex-public:   Plex lives here (publicly reachable via plex.tv)
-#   - plex-private:  the *arr stack lives here, only reachable via tailnet
+# The plex-private Docker network has NO host port bindings.
+# Anything on this network is only reachable via the tailnet,
+# routed by the ts-subnet-router container which also runs
+# Tailscale Serve to expose each app at a clean HTTPS URL.
 #
-# The ts-subnet-router container bridges plex-private to your tailnet.
-# Nothing on plex-private publishes ports to the host.
+# Bring up in a dedicated Compose project so it doesn't collide
+# with any existing media stack on this host:
+#
+#   docker compose -p plex-takehome up -d
+#
+# Tear down with:
+#
+#   docker compose -p plex-takehome down -v
 
 networks:
-  plex-public:
-    driver: bridge
   plex-private:
     driver: bridge
     ipam:
@@ -17,52 +22,114 @@ networks:
         - subnet: 172.30.0.0/24
 
 services:
-  # ===== Tailscale plumbing =====
+  # ===== Tailscale subnet router + Serve =====
+  # Bridges the plex-private network to the tailnet, AND runs
+  # Tailscale Serve to publish each *arr app at a friendly HTTPS URL.
+  # Satisfies the "subnet router" half of the take-home spec.
 
-  ts-subnet-router:
-    # TODO: implement the subnet router
-    # - image: tailscale/tailscale
-    # - networks: [plex-public, plex-private]  (needs both)
-    # - env: TS_AUTHKEY, TS_ROUTES, TS_EXTRA_ARGS=--advertise-tags=tag:plex-router
-    # - state volume so it doesn't re-auth on restart
-    # - cap_add: NET_ADMIN
-    # - sysctls: net.ipv4.ip_forward=1, net.ipv6.conf.all.forwarding=1
-    # - assign a static IP on plex-private (e.g. 172.30.0.2)
-    image: placeholder
+  app:
+    image: tailscale/tailscale:latest
+    hostname: app                          # becomes app.<your-tailnet>.ts.net
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_ROUTES=${TS_ROUTES}
+      - TS_USERSPACE=false                 # kernel networking required for subnet routing
+      - TS_STATE_DIR=/var/lib/tailscale    # persist state across restarts
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_EXTRA_ARGS=--advertise-tags=tag:plex-router
+    volumes:
+      - ./tailscale-state/app:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      plex-private:
+        ipv4_address: 172.30.0.2
+    restart: unless-stopped
 
-  ts-ssh-sidecar:
-    # TODO: implement the SSH device
-    # - image: tailscale/tailscale
-    # - networks: [plex-private]
-    # - env: TS_AUTHKEY, TS_EXTRA_ARGS=--ssh --advertise-tags=tag:plex-ssh
-    # - state volume
-    # - this satisfies the "Tailscale device with SSH enabled" requirement
-    image: placeholder
+  # ===== Tailscale SSH device =====
+  # Separate Tailscale node with --ssh enabled. Satisfies the
+  # "Tailscale device with SSH enabled" half of the take-home spec.
+  # Lives on plex-private so it can be used as a debug/jump host
+  # inside the private network.
 
-  # ===== The Plex stack =====
-  # All admin UIs live on plex-private with NO host port bindings.
-  # The only thing publicly reachable here is Plex itself.
+  ts-ssh:
+    image: tailscale/tailscale:latest
+    hostname: ssh-sidecar
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_USERSPACE=false
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--ssh --advertise-tags=tag:plex-router
+    volumes:
+      - ./tailscale-state/ssh-sidecar:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      - plex-private
+    restart: unless-stopped
 
-  plex:
-    # TODO
-    # - image: lscr.io/linuxserver/plex:latest
-    # - networks: [plex-public]
-    # - ports: needed for direct play / discovery
-    # - PLEX_CLAIM env
-    image: placeholder
+  # ===== The *arr stack =====
+  # Each container has NO `ports:` block — only reachable via the
+  # tailnet, through the subnet router above. Static IPs match the
+  # serve.json handler config.
 
   sonarr:
-    # TODO
-    # - image: lscr.io/linuxserver/sonarr:latest
-    # - networks: [plex-private]    # <-- private network ONLY
-    # - NO `ports:` block            # <-- key security move
-    # - static IP on plex-private (e.g. 172.30.0.10)
-    image: placeholder
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr-demo
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/sonarr:/config
+    networks:
+      plex-private:
+        ipv4_address: 172.30.0.10
+    restart: unless-stopped
 
   radarr:
-    # TODO: same pattern as sonarr (e.g. 172.30.0.11)
-    image: placeholder
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr-demo
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/radarr:/config
+    networks:
+      plex-private:
+        ipv4_address: 172.30.0.11
+    restart: unless-stopped
 
   prowlarr:
-    # TODO: same pattern (e.g. 172.30.0.12)
-    image: placeholder
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr-demo
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/prowlarr:/config
+    networks:
+      plex-private:
+        ipv4_address: 172.30.0.12
+    restart: unless-stopped
+
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: tautulli-demo
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ./config/tautulli:/config
+    networks:
+      plex-private:
+        ipv4_address: 172.30.0.13
+    restart: unless-stopped
