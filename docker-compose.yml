@@ -1,0 +1,68 @@
+# Secure your Plex Software Stack with Tailscale
+#
+# Two networks:
+#   - plex-public:   Plex lives here (publicly reachable via plex.tv)
+#   - plex-private:  the *arr stack lives here, only reachable via tailnet
+#
+# The ts-subnet-router container bridges plex-private to your tailnet.
+# Nothing on plex-private publishes ports to the host.
+
+networks:
+  plex-public:
+    driver: bridge
+  plex-private:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+services:
+  # ===== Tailscale plumbing =====
+
+  ts-subnet-router:
+    # TODO: implement the subnet router
+    # - image: tailscale/tailscale
+    # - networks: [plex-public, plex-private]  (needs both)
+    # - env: TS_AUTHKEY, TS_ROUTES, TS_EXTRA_ARGS=--advertise-tags=tag:plex-router
+    # - state volume so it doesn't re-auth on restart
+    # - cap_add: NET_ADMIN
+    # - sysctls: net.ipv4.ip_forward=1, net.ipv6.conf.all.forwarding=1
+    # - assign a static IP on plex-private (e.g. 172.30.0.2)
+    image: placeholder
+
+  ts-ssh-sidecar:
+    # TODO: implement the SSH device
+    # - image: tailscale/tailscale
+    # - networks: [plex-private]
+    # - env: TS_AUTHKEY, TS_EXTRA_ARGS=--ssh --advertise-tags=tag:plex-ssh
+    # - state volume
+    # - this satisfies the "Tailscale device with SSH enabled" requirement
+    image: placeholder
+
+  # ===== The Plex stack =====
+  # All admin UIs live on plex-private with NO host port bindings.
+  # The only thing publicly reachable here is Plex itself.
+
+  plex:
+    # TODO
+    # - image: lscr.io/linuxserver/plex:latest
+    # - networks: [plex-public]
+    # - ports: needed for direct play / discovery
+    # - PLEX_CLAIM env
+    image: placeholder
+
+  sonarr:
+    # TODO
+    # - image: lscr.io/linuxserver/sonarr:latest
+    # - networks: [plex-private]    # <-- private network ONLY
+    # - NO `ports:` block            # <-- key security move
+    # - static IP on plex-private (e.g. 172.30.0.10)
+    image: placeholder
+
+  radarr:
+    # TODO: same pattern as sonarr (e.g. 172.30.0.11)
+    image: placeholder
+
+  prowlarr:
+    # TODO: same pattern (e.g. 172.30.0.12)
+    image: placeholder

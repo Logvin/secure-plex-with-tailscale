@@ -1,0 +1,28 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.tsauthkey
+*.authkey
+
+# Tailscale runtime state
+tailscale-state/
+ts-*-state/
+
+# Docker volumes (if mounted into the repo)
+volumes/
+config/
+data/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
